@@ -42,6 +42,7 @@ Examples:
 		environment, _ := cmd.Flags().GetString("env")
 		serviceType, _ := cmd.Flags().GetString("service")
 		port, _ := cmd.Flags().GetString("port")
+		bastionInstanceID, _ := cmd.Flags().GetString("bastion-id")
 		global, _ := cmd.Flags().GetBool("global")
 
 		// Load config to check available SSO profiles
@@ -126,15 +127,63 @@ Examples:
 			serviceType = result
 		}
 
+		// Prompt for account ID if not provided
+		if accountID == "" {
+			result, err := prompt.Input("AWS Account ID", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			accountID = result
+		}
+
+		// Prompt for role name if not provided
+		if roleName == "" {
+			result, err := prompt.Input("AWS Role Name (e.g., PowerUserAccess)", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			roleName = result
+		}
+
+		// Prompt for port if not provided
+		if port == "" {
+			defaultPort := "3306" // MySQL default
+			if serviceType == "redis" {
+				defaultPort = "6379"
+			}
+			result, err := prompt.Input(fmt.Sprintf("Local port (default: %s)", defaultPort), nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			if result == "" {
+				result = defaultPort
+			}
+			port = result
+		}
+
+		// Prompt for bastion instance ID if not provided (optional)
+		if bastionInstanceID == "" {
+			result, err := prompt.Input("Bastion Instance ID (optional - leave empty for auto-discovery)", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			bastionInstanceID = result
+		}
+
 		// Create connection profile
 		connectionProfile := config.ConnectionProfile{
-			SSOProfile:  ssoProfile,
-			AccountID:   accountID,
-			RoleName:    roleName,
-			Region:      region,
-			Environment: environment,
-			ServiceType: serviceType,
-			Port:        port,
+			SSOProfile:        ssoProfile,
+			AccountID:         accountID,
+			RoleName:          roleName,
+			Region:            region,
+			Environment:       environment,
+			ServiceType:       serviceType,
+			Port:              port,
+			BastionInstanceID: bastionInstanceID,
 		}
 
 		// Save the profile (local by default, global if specified)
@@ -334,6 +383,7 @@ func init() {
 	profileCreateCmd.Flags().StringP("env", "e", "", "Environment (dev, stg, prd)")
 	profileCreateCmd.Flags().StringP("service", "s", "", "Service type (rds, redis)")
 	profileCreateCmd.Flags().StringP("port", "p", "", "Default local port")
+	profileCreateCmd.Flags().String("bastion-id", "", "Bastion instance ID (optional)")
 	profileCreateCmd.Flags().Bool("global", false, "Save to global config instead of local (.bifrost.config.yaml)")
 
 	// Delete command flags
