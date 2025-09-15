@@ -1,0 +1,23 @@
+name: Bump version and push tag
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  tagging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          # Using the PAT of the bot user to push the tag
+          # To work around the limitation of workflows:
+          # > "An action in a workflow run can’t trigger a new workflow run."
+          github_token: ${{ secrets.GH_DEPLOYMENTS_BOT_PAT }}
+          release_branches: main
+          tag_prefix: v
+          default_bump: false

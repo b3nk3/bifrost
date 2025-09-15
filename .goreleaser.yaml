@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+
+builds:
+  - id: "cli"
+    binary: "bifrost"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      # - linux
+      # - windows
+      - darwin
+    ldflags:
+      - -s -w
+      - -X github.com/b3nk3/bifrost/cmd.Version={{.Version}}
+      - -X github.com/b3nk3/bifrost/cmd.BuildDate={{.Date}}
+      - -X github.com/b3nk3/bifrost/cmd.Commit={{.Commit}}
+
+archives:
+  - formats: tar.gz
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: zip
+
+homebrew_casks:
+  - name: "bifrost"
+    # custom_block: |
+    #   module GitHubHelper
+    #     def self.get_asset_api_url(tag, name)
+    #       require "utils/github"
+    #       release = GitHub.get_release("b3nk3", "bifrost", tag)
+    #       release["assets"].find { |asset| asset["name"] == name }["url"]
+    #     end
+    #     def self.token
+    #       require "utils/github"
+    #       github_token = ENV["HOMEBREW_GITHUB_API_TOKEN"]
+    #       unless github_token
+    #         github_token = GitHub::API.credentials
+    #         raise "Failed to retrieve token" if github_token.nil? || github_token.empty?
+    #       end
+    #       github_token
+    #     end
+    #   end
+
+    # url:
+    #   template: '#{GitHubHelper.get_asset_api_url("{{.Tag}}", "{{.ArtifactName}}")}'
+    #   headers:
+    #     - "Accept: application/octet-stream"
+    #     - "Authorization: Bearer #{GitHubHelper.token}"
+    #     - "X-GitHub-Api-Version: 2022-11-28"
+
+    hooks:
+      post:
+        # Apple Tax workaround - remove quarantine flag
+        # https://goreleaser.com/customization/homebrew_casks/#signing-and-notarizing
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/bifrost"]
+          end
+
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore: Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+
+    directory: Casks
+
+    homepage: "https://github.com/b3nk3/bifrost"
+    description: "A command-line utility to simplify connecting to AWS RDS/Redis instances through bastion hosts utilising AWS SSM Session Manager."
+
+    dependencies:
+      - formula: awscli
+      - formula: gh
+      - cask: session-manager-plugin
+
+    repository:
+      owner: b3nk3
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.GH_DEPLOYMENTS_BOT_PAT }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
