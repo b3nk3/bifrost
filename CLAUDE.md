@@ -69,13 +69,16 @@ type SSOProfile struct {
 }
 
 type ConnectionProfile struct {
-    SSOProfile  string `yaml:"sso_profile"`  // References SSO profile
-    AccountID   string `yaml:"account_id"`
-    RoleName    string `yaml:"role_name"`
-    Region      string `yaml:"region"`
-    Environment string `yaml:"environment"`
-    ServiceType string `yaml:"service"`
-    Port        string `yaml:"port"`
+    SSOProfile        string `yaml:"sso_profile"`         // References SSO profile
+    AccountID         string `yaml:"account_id"`
+    RoleName          string `yaml:"role_name"`
+    Region            string `yaml:"region"`
+    Environment       string `yaml:"environment"`
+    ServiceType       string `yaml:"service"`
+    Port              string `yaml:"port"`
+    BastionInstanceID string `yaml:"bastion_instance_id"` // Direct bastion instance ID
+    RDSInstanceName   string `yaml:"rds_instance_name"`   // Specific RDS instance name
+    RedisClusterName  string `yaml:"redis_cluster_name"`  // Specific Redis cluster name
 }
 ```
 
@@ -104,18 +107,20 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
    - Suggests `{environment}-{service}` naming (e.g., "dev-rds")
    - Choice between `📁 Local (.bifrost.config.yaml)` or `🌍 Global (~/.bifrost/config.yaml)`
 5. **SSO Authentication**: Auto-detect single SSO profile or prompt for selection
-6. **Resource Discovery**: Tag-based filtering with interactive selection for multiple matches
-7. **Keep Alive Setup**: Configure and start background keep alive if enabled
-8. **Enhanced Signal Handling**: Graceful shutdown with Ctrl+C, proper cleanup of SSM sessions
+6. **Resource Discovery**: Tag-based filtering with interactive selection for multiple matches, or direct instance/cluster specification
+7. **Bastion Instance ID Handling**: Prompt for bastion instance ID if not provided in profile or flags
+8. **Keep Alive Setup**: Configure and start background keep alive if enabled
+9. **Enhanced Signal Handling**: Graceful shutdown with Ctrl+C, proper cleanup of SSM sessions
 
 ### Resource Discovery Pattern
-All AWS resources (bastion hosts, RDS, Redis) are discovered using:
-- **Tag filtering**: `env=<environment>` tag matching
+All AWS resources (bastion hosts, RDS, Redis) can be discovered using:
+- **Tag filtering**: `env=<environment>` tag matching (automatic discovery)
+- **Direct specification**: Use specific instance IDs or cluster names in profiles
 - **Interactive selection**: Single resource confirmed, multiple resources prompted
 - **Service patterns**:
-  - Bastion: EC2 instances with `Name=*bastion*` + `env=<environment>`
-  - RDS: DB instances with `env=<environment>` tag
-  - Redis: ElastiCache clusters with `env=<environment>` tag
+  - Bastion: EC2 instances with `Name=*bastion*` + `env=<environment>`, or direct instance ID
+  - RDS: DB instances with `env=<environment>` tag, or specific instance name
+  - Redis: ElastiCache clusters with `env=<environment>` tag, or specific cluster name
 
 ### Keep Alive Architecture
 The keep alive system maintains active SSM tunnels to prevent timeouts:
@@ -166,7 +171,7 @@ type ConnectionProfile struct {
 ./bifrost auth login --profile test-profile
 
 # Test connection profiles (defaults to local storage)
-./bifrost profile create --name test-conn --env dev --service rds
+./bifrost profile create --name test-conn --env dev --service rds --bastion-id i-1234567890abcdef0
 
 # Test enhanced connect with profile selection
 ./bifrost connect
@@ -196,13 +201,16 @@ type ConnectionProfile struct {
 # .bifrost.config.yaml
 connection_profiles:
   dev-rds:
-    sso_profile: work  # References global SSO profile
+    sso_profile: work         # References global SSO profile
     account_id: "123456789"
     role_name: PowerUserAccess
     region: us-west-2
     environment: dev
     service: rds
     port: "3306"
+    bastion_instance_id: "i-1234567890abcdef0"  # Optional: Direct bastion instance
+    rds_instance_name: "dev-database"           # Optional: Specific RDS instance
+    redis_cluster_name: "dev-cache"             # Optional: Specific Redis cluster
 ```
 
 ## Key Dependencies
