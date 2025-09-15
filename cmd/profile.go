@@ -176,14 +176,15 @@ Examples:
 
 		// Prompt for RDS/Redis resource names based on service type
 		var rdsInstanceName, redisClusterName string
-		if serviceType == "rds" {
+		switch serviceType {
+		case "rds":
 			result, err := prompt.Input("RDS DB Instance Name", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
 			rdsInstanceName = result
-		} else if serviceType == "redis" {
+		case "redis":
 			result, err := prompt.Input("Redis Cluster Name (replication group ID)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
@@ -335,7 +336,7 @@ var profileDeleteCmd = &cobra.Command{
 			localViper := viper.New()
 			localViper.SetConfigType("yaml")
 			localViper.SetConfigFile(localConfigFile)
-			
+
 			if err := localViper.ReadInConfig(); err == nil {
 				if err := localViper.Unmarshal(localConfig); err == nil {
 					if _, existsLocally := localConfig.ConnectionProfiles[profileName]; existsLocally {
@@ -358,35 +359,35 @@ var profileDeleteCmd = &cobra.Command{
 			SSOProfiles:        make(map[string]config.SSOProfile),
 			ConnectionProfiles: make(map[string]config.ConnectionProfile),
 		}
-		
+
 		// Load only global config
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Printf("Error getting home directory: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		globalConfigFile := filepath.Join(homeDir, ".bifrost", "config.yaml")
 		globalViper := viper.New()
 		globalViper.SetConfigType("yaml")
 		globalViper.SetConfigFile(globalConfigFile)
-		
+
 		if err := globalViper.ReadInConfig(); err != nil {
 			fmt.Printf("Error reading global config: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		if err := globalViper.Unmarshal(globalConfig); err != nil {
 			fmt.Printf("Error parsing global config: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		// Check if profile exists in global config
 		if _, existsGlobally := globalConfig.ConnectionProfiles[profileName]; !existsGlobally {
 			fmt.Printf("Connection profile '%s' not found in global config\n", profileName)
 			os.Exit(1)
 		}
-		
+
 		// Delete from global config
 		delete(globalConfig.ConnectionProfiles, profileName)
 		if err := cfgManager.Save(globalConfig); err != nil {

@@ -387,13 +387,6 @@ func getAWSConfig(ssoProfileName, region, accountId, roleName string) (aws.Confi
 	return awsCfg, accountId, roleName, nil
 }
 
-
-type database struct {
-	Name     string
-	Endpoint string
-	Port     int32
-}
-
 // Get the RDS database endpoint by DB instance name
 func getRDSEndpoint(cfg aws.Config, dbInstanceName string) (string, int32, error) {
 	svc := rds.NewFromConfig(cfg)
@@ -432,18 +425,18 @@ func getRedisEndpoint(cfg aws.Config, clusterName string) (string, int32, error)
 	}
 
 	if len(result.ReplicationGroups) == 0 {
-		return "", 0, fmt.Errorf("Redis cluster '%s' not found", clusterName)
+		return "", 0, fmt.Errorf("redis cluster '%s' not found", clusterName)
 	}
 
 	cluster := result.ReplicationGroups[0]
-	
+
 	// Ensure NodeGroups is non-empty and PrimaryEndpoint is not nil
 	if len(cluster.NodeGroups) == 0 {
-		return "", 0, fmt.Errorf("Redis cluster '%s' has no node groups", clusterName)
+		return "", 0, fmt.Errorf("redis cluster '%s' has no node groups", clusterName)
 	}
 
 	if cluster.NodeGroups[0].PrimaryEndpoint == nil {
-		return "", 0, fmt.Errorf("Redis cluster '%s' does not have a primary endpoint (may not be available)", clusterName)
+		return "", 0, fmt.Errorf("redis cluster '%s' does not have a primary endpoint (may not be available)", clusterName)
 	}
 
 	fmt.Printf("🎯 Connecting to Redis cluster: %s\n", *cluster.ReplicationGroupId)
