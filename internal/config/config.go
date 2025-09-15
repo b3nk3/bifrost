@@ -16,13 +16,14 @@ type SSOProfile struct {
 
 // ConnectionProfile represents a connection configuration
 type ConnectionProfile struct {
-	SSOProfile  string `yaml:"sso_profile" mapstructure:"sso_profile"`
-	AccountID   string `yaml:"account_id" mapstructure:"account_id"`
-	RoleName    string `yaml:"role_name" mapstructure:"role_name"`
-	Region      string `yaml:"region" mapstructure:"region"`
-	Environment string `yaml:"environment" mapstructure:"environment"`
-	ServiceType string `yaml:"service" mapstructure:"service"`
-	Port        string `yaml:"port" mapstructure:"port"`
+	SSOProfile       string `yaml:"sso_profile" mapstructure:"sso_profile"`
+	AccountID        string `yaml:"account_id" mapstructure:"account_id"`
+	RoleName         string `yaml:"role_name" mapstructure:"role_name"`
+	Region           string `yaml:"region" mapstructure:"region"`
+	Environment      string `yaml:"environment" mapstructure:"environment"`
+	ServiceType      string `yaml:"service" mapstructure:"service"`
+	Port             string `yaml:"port" mapstructure:"port"`
+	BastionInstanceID string `yaml:"bastion_instance_id" mapstructure:"bastion_instance_id"`
 }
 
 // Config represents the application configuration

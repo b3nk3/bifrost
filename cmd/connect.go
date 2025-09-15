@@ -48,6 +48,7 @@ bifrost connect --env dev --service rds --port 3306`,
 		environmentFlag, _ := cmd.Flags().GetString("env")
 		serviceTypeFlag, _ := cmd.Flags().GetString("service")
 		portFlag, _ := cmd.Flags().GetString("port")
+		bastionInstanceIDFlag, _ := cmd.Flags().GetString("bastion-instance-id")
 		keepAliveFlag, _ := cmd.Flags().GetBool("keep-alive")
 		keepAliveInterval, _ := cmd.Flags().GetDuration("keep-alive-interval")
 
@@ -120,6 +121,9 @@ bifrost connect --env dev --service rds --port 3306`,
 			}
 			if portFlag == "" && selectedProfile.Port != "" {
 				portFlag = selectedProfile.Port
+			}
+			if bastionInstanceIDFlag == "" && selectedProfile.BastionInstanceID != "" {
+				bastionInstanceIDFlag = selectedProfile.BastionInstanceID
 			}
 		}
 
@@ -221,10 +225,17 @@ bifrost connect --env dev --service rds --port 3306`,
 		fmt.Printf("🌐 Port: %s\n", portFlag)
 
 		// 2. Retrieve bastion instance ID
-		bastionID, err := getBastionInstanceID(awsCfg, environmentFlag)
-		if err != nil {
-			fmt.Printf("Error retrieving bastion instance ID: %v\n", err)
-			os.Exit(1)
+		var bastionID string
+		if bastionInstanceIDFlag != "" {
+			bastionID = bastionInstanceIDFlag
+			fmt.Printf("🏰 Using configured bastion instance: %s\n", bastionID)
+		} else {
+			var err error
+			bastionID, err = getBastionInstanceID(awsCfg, environmentFlag)
+			if err != nil {
+				fmt.Printf("Error retrieving bastion instance ID: %v\n", err)
+				os.Exit(1)
+			}
 		}
 
 		// Get endpoint based on service type
@@ -242,7 +253,7 @@ bifrost connect --env dev --service rds --port 3306`,
 
 		// 4. Offer to save as profile if manual setup was used (before starting SSM session)
 		if selectedProfile == nil { // Only for manual setup
-			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, environmentFlag, serviceTypeFlag, portFlag)
+			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, environmentFlag, serviceTypeFlag, portFlag, bastionInstanceIDFlag)
 		}
 
 		fmt.Printf("🔌 Forwarding `%s` to 127.0.0.1:%s (use this as host in your app or client)\n", serviceTypeFlag, portFlag)
@@ -272,6 +283,7 @@ func init() {
 	connectCmd.Flags().String("sso-profile", "", "SSO profile to use for authentication")
 	connectCmd.Flags().String("region", "", "AWS region where workloads are deployed")
 	connectCmd.Flags().StringP("profile", "P", "", "Connection profile to use")
+	connectCmd.Flags().String("bastion-instance-id", "", "EC2 instance ID of bastion host (skips discovery)")
 	connectCmd.Flags().Bool("keep-alive", true, "Enable keep alive to maintain SSM connection")
 	connectCmd.Flags().Duration("keep-alive-interval", 30*time.Second, "Interval between keep alive checks")
 }
@@ -682,7 +694,7 @@ func isPortInUse(port int) bool {
 }
 
 // offerToSaveProfile prompts the user to save the manual connection configuration as a profile
-func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, environment, serviceType, port string) {
+func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, environment, serviceType, port, bastionInstanceID string) {
 	fmt.Println() // Add some spacing
 
 	// Ask if they want to save the configuration
@@ -708,13 +720,14 @@ func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfil
 
 	// Create connection profile
 	connectionProfile := config.ConnectionProfile{
-		SSOProfile:  ssoProfile,
-		AccountID:   accountID,
-		RoleName:    roleName,
-		Region:      region,
-		Environment: environment,
-		ServiceType: serviceType,
-		Port:        port,
+		SSOProfile:       ssoProfile,
+		AccountID:        accountID,
+		RoleName:         roleName,
+		Region:           region,
+		Environment:      environment,
+		ServiceType:      serviceType,
+		Port:             port,
+		BastionInstanceID: bastionInstanceID,
 	}
 
 	// Save the profile
