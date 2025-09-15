@@ -1,4 +1,4 @@
-# Bifrost
+<h1 style="text-align: center;">🌈 Bifrost </h1>
 
 A command-line utility to simplify connecting to AWS RDS/Redis instances through bastion hosts utilising AWS SSM Session Manager.
 
@@ -12,43 +12,14 @@ A command-line utility to simplify connecting to AWS RDS/Redis instances through
 
 ## Installation
 
-### Prerequisites
-
-To install from our private Homebrew tap, a GitHub PAT (Personal Access Token) is required.
-You can generate a long lived one, but my recommended method is to use the GitHub CLI and generate a short lived token on install. (this will have to be repeated when updating `bifrost`) 
-
-- AWS CLI [brew docs](https://formulae.brew.sh/formula/awscli) or [official docs](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-  ```bash
-  brew install awscli
-  ```
-
-- AWS CLI SSM plugin [brew docs](https://formulae.brew.sh/cask/session-manager-plugin#default) or [official docs](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
-  ```bash
-  brew install --cask session-manager-plugin
-  ```
-  
-- GitHub CLI (`gh`) must be installed and authenticated. You can install it with:
-  ```bash
-  brew install gh
-  ```
-  Then authenticate with:
-  ```bash
-  gh auth login
-  ```
-
 ### Using Homebrew
 
-1. First, export your GitHub token to allow access to private repositories:
+1. Add the Homebrew tap:
    ```bash
-   export HOMEBREW_GITHUB_API_TOKEN="$(gh auth token)"
+   brew tap b3nk3/tap
    ```
 
-2. Add the Homebrew tap (using the SSH GitHub URL):
-   ```bash
-   brew tap b3nk3/tap git@github.com:b3nk3/homebrew-tap.git
-   ```
-
-3. Install bifrost:
+2. Install Bifrost:
    ```bash
    brew install bifrost
    ```
@@ -106,25 +77,20 @@ bifrost help
 
 To update bifrost to the latest version:
 
-1. First, ensure your GitHub token is set:
-   ```bash
-   export HOMEBREW_GITHUB_API_TOKEN="$(gh auth token)"
-   ```
-
-2. Update Homebrew's formulae:
+1. Update Homebrew's formulae:
    ```bash
    brew update
    ```
 
-3. Upgrade bifrost:
+2. Upgrade bifrost:
    ```bash
    brew upgrade bifrost
    ```
 
 
-## Upcoming Features
+## Upcoming features
 
-- [ ] Customizable tag filtering (for open source compatibility)
+- [ ] Customizable tag filtering?
 - [ ] Multiple simultaneous connections
 - [ ] Terminal UI (TUI) interface
 
@@ -147,3 +113,5 @@ MIT - see [LICENSE.md](LICENSE.md)
 ## Acknowledgements
 
 Inspiration taken from `aws-sso-utils` and `common-fate/granted`.
+
+Special thanks to @diosdavid for the initial idea.
