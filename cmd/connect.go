@@ -11,20 +11,17 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/b3nk3/bifrost/internal/config"
-	"github.com/b3nk3/bifrost/internal/sso"
-	"github.com/b3nk3/bifrost/internal/ui"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/b3nk3/bifrost/internal/config"
+	"github.com/b3nk3/bifrost/internal/sso"
+	"github.com/b3nk3/bifrost/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +32,7 @@ var connectCmd = &cobra.Command{
 	Long: `Initiate a connection to an AWS RDS/Redis instance through a bastion host with AWS SSM Session Manager.
 	
 For example:
-bifrost connect --env dev --service rds --port 3306`,
+bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0`,
 	Run: func(cmd *cobra.Command, args []string) {
 		prompt := ui.NewPrompt()
 		cfgManager := config.NewManager()
@@ -224,27 +221,49 @@ bifrost connect --env dev --service rds --port 3306`,
 		}
 		fmt.Printf("🌐 Port: %s\n", portFlag)
 
-		// 2. Retrieve bastion instance ID
-		var bastionID string
-		if bastionInstanceIDFlag != "" {
-			bastionID = bastionInstanceIDFlag
-			fmt.Printf("🏰 Using configured bastion instance: %s\n", bastionID)
-		} else {
-			var err error
-			bastionID, err = getBastionInstanceID(awsCfg, environmentFlag)
+		// 2. Prompt for bastion instance ID if not provided
+		if bastionInstanceIDFlag == "" {
+			result, err := prompt.Input("Enter bastion EC2 instance ID", nil)
 			if err != nil {
-				fmt.Printf("Error retrieving bastion instance ID: %v\n", err)
+				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
+			bastionInstanceIDFlag = result
 		}
+		fmt.Printf("🏰 Using bastion instance: %s\n", bastionInstanceIDFlag)
 
 		// Get endpoint based on service type
 		var endpoint string
 		var port int32
+		var clusterName, dbName string
 		if serviceTypeFlag == "redis" {
-			endpoint, port, err = getRedisEndpoint(awsCfg, environmentFlag)
+			// Use Redis cluster name from profile or prompt for it
+			if selectedProfile != nil && selectedProfile.RedisClusterName != "" {
+				clusterName = selectedProfile.RedisClusterName
+				fmt.Printf("🔗 Using Redis cluster from profile: %s\n", clusterName)
+			} else {
+				var err error
+				clusterName, err = prompt.Input("Enter Redis cluster name (replication group ID)", nil)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+			}
+			endpoint, port, err = getRedisEndpoint(awsCfg, clusterName)
 		} else {
-			endpoint, port, err = getRDSEndpoint(awsCfg, environmentFlag)
+			// Use RDS instance name from profile or prompt for it
+			if selectedProfile != nil && selectedProfile.RDSInstanceName != "" {
+				dbName = selectedProfile.RDSInstanceName
+				fmt.Printf("🔗 Using RDS instance from profile: %s\n", dbName)
+			} else {
+				var err error
+				dbName, err = prompt.Input("Enter RDS DB instance name", nil)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+			}
+			endpoint, port, err = getRDSEndpoint(awsCfg, dbName)
 		}
 		if err != nil {
 			fmt.Printf("Error retrieving endpoint: %v\n", err)
@@ -253,7 +272,14 @@ bifrost connect --env dev --service rds --port 3306`,
 
 		// 4. Offer to save as profile if manual setup was used (before starting SSM session)
 		if selectedProfile == nil { // Only for manual setup
-			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, environmentFlag, serviceTypeFlag, portFlag, bastionInstanceIDFlag)
+			// Get the actual resource names that were used
+			var rdsName, redisName string
+			if serviceTypeFlag == "redis" {
+				redisName = clusterName
+			} else {
+				rdsName = dbName
+			}
+			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, environmentFlag, serviceTypeFlag, portFlag, bastionInstanceIDFlag, rdsName, redisName)
 		}
 
 		fmt.Printf("🔌 Forwarding `%s` to 127.0.0.1:%s (use this as host in your app or client)\n", serviceTypeFlag, portFlag)
@@ -263,7 +289,7 @@ bifrost connect --env dev --service rds --port 3306`,
 		if keepAliveFlag {
 			fmt.Printf("💓 Keep alive enabled (interval: %v)\n", keepAliveInterval)
 		}
-		err = startSSMPortForwardingWithKeepAlive(awsCfg, bastionID, endpoint, port, portFlag, regionFlag, serviceTypeFlag, keepAliveFlag, keepAliveInterval)
+		err = startSSMPortForwardingWithKeepAlive(awsCfg, bastionInstanceIDFlag, endpoint, port, portFlag, regionFlag, serviceTypeFlag, keepAliveFlag, keepAliveInterval)
 		if err != nil {
 			fmt.Printf("Error starting SSM session: %v\n", err)
 			os.Exit(1)
@@ -283,7 +309,7 @@ func init() {
 	connectCmd.Flags().String("sso-profile", "", "SSO profile to use for authentication")
 	connectCmd.Flags().String("region", "", "AWS region where workloads are deployed")
 	connectCmd.Flags().StringP("profile", "P", "", "Connection profile to use")
-	connectCmd.Flags().String("bastion-instance-id", "", "EC2 instance ID of bastion host (skips discovery)")
+	connectCmd.Flags().String("bastion-instance-id", "", "EC2 instance ID of bastion host (required)")
 	connectCmd.Flags().Bool("keep-alive", true, "Enable keep alive to maintain SSM connection")
 	connectCmd.Flags().Duration("keep-alive-interval", 30*time.Second, "Interval between keep alive checks")
 }
@@ -361,48 +387,6 @@ func getAWSConfig(ssoProfileName, region, accountId, roleName string) (aws.Confi
 	return awsCfg, accountId, roleName, nil
 }
 
-// Find the bastion instance ID
-func getBastionInstanceID(cfg aws.Config, environment string) (string, error) {
-	svc := ec2.NewFromConfig(cfg)
-
-	// Filter for instances with a tag "Name" containing "bastion"
-	input := &ec2.DescribeInstancesInput{
-		Filters: []types.Filter{
-			{
-				Name: aws.String("tag:Name"),
-				Values: []string{
-					"*bastion*",
-				},
-			},
-			{
-				Name: aws.String("tag:env"),
-				Values: []string{
-					"*" + environment + "*",
-				},
-			},
-			{
-				Name: aws.String("instance-state-name"),
-				Values: []string{
-					"running",
-				},
-			},
-		},
-	}
-
-	result, err := svc.DescribeInstances(context.Background(), input)
-	if err != nil {
-		return "", err
-	}
-
-	// Find the first running bastion instance
-	for _, reservation := range result.Reservations {
-		for _, instance := range reservation.Instances {
-			return *instance.InstanceId, nil
-		}
-	}
-
-	return "", fmt.Errorf("no running bastion instance found")
-}
 
 type database struct {
 	Name     string
@@ -410,124 +394,60 @@ type database struct {
 	Port     int32
 }
 
-// Get the RDS database endpoint
-func getRDSEndpoint(cfg aws.Config, environment string) (string, int32, error) {
+// Get the RDS database endpoint by DB instance name
+func getRDSEndpoint(cfg aws.Config, dbInstanceName string) (string, int32, error) {
 	svc := rds.NewFromConfig(cfg)
-	prompt := ui.NewPrompt()
 
-	// Get all DB instances
-	result, err := svc.DescribeDBInstances(context.Background(), &rds.DescribeDBInstancesInput{})
+	// Get specific DB instance by name
+	result, err := svc.DescribeDBInstances(context.Background(), &rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: &dbInstanceName,
+	})
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("failed to describe DB instance '%s': %w", dbInstanceName, err)
 	}
 
-	// filter based on `env` tag
-	databases := []database{}
-	for _, db := range result.DBInstances {
-		if db.TagList != nil {
-			for _, tag := range db.TagList {
-				if tag.Key != nil && *tag.Key == "env" && tag.Value != nil && strings.Contains(*tag.Value, environment) {
-					databases = append(databases, database{
-						Name:     *db.DBInstanceIdentifier,
-						Endpoint: *db.Endpoint.Address,
-						Port:     *db.Endpoint.Port,
-					})
-				}
-			}
-		}
+	if len(result.DBInstances) == 0 {
+		return "", 0, fmt.Errorf("DB instance '%s' not found", dbInstanceName)
 	}
 
-	if len(databases) == 1 {
-		fmt.Printf("🎯 Connecting to RDS instance: %s\n", databases[0].Name)
-		return databases[0].Endpoint, int32(databases[0].Port), nil
-	} else if len(databases) > 1 {
-		dbNames := make([]string, len(databases))
-		for i, db := range databases {
-			dbNames[i] = db.Name
-		}
-
-		selected, err := prompt.Select("Select RDS instance", dbNames)
-		if err != nil {
-			return "", 0, fmt.Errorf("prompt failed %v", err)
-		}
-
-		// Find the selected database
-		for _, db := range databases {
-			if db.Name == selected {
-				return db.Endpoint, int32(db.Port), nil
-			}
-		}
+	db := result.DBInstances[0]
+	if db.Endpoint == nil {
+		return "", 0, fmt.Errorf("DB instance '%s' does not have an endpoint (may not be available)", dbInstanceName)
 	}
 
-	return "", 0, fmt.Errorf("no RDS instances found for environment %s", environment)
+	fmt.Printf("🎯 Connecting to RDS instance: %s\n", *db.DBInstanceIdentifier)
+	return *db.Endpoint.Address, int32(*db.Endpoint.Port), nil
 }
 
-// Get the Redis cluster endpoint
-func getRedisEndpoint(cfg aws.Config, environment string) (string, int32, error) {
+// Get the Redis cluster endpoint by replication group name
+func getRedisEndpoint(cfg aws.Config, clusterName string) (string, int32, error) {
 	svc := elasticache.NewFromConfig(cfg)
-	prompt := ui.NewPrompt()
 
 	ctx := context.Background()
-	result, err := svc.DescribeReplicationGroups(ctx, &elasticache.DescribeReplicationGroupsInput{})
+	result, err := svc.DescribeReplicationGroups(ctx, &elasticache.DescribeReplicationGroupsInput{
+		ReplicationGroupId: &clusterName,
+	})
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("failed to describe Redis cluster '%s': %w", clusterName, err)
 	}
 
-	type redisCluster struct {
-		Name     string
-		Endpoint string
-		Port     int32
+	if len(result.ReplicationGroups) == 0 {
+		return "", 0, fmt.Errorf("Redis cluster '%s' not found", clusterName)
 	}
 
-	clusters := []redisCluster{}
-
-	for _, cluster := range result.ReplicationGroups {
-		if cluster.ARN == nil {
-			continue
-		}
-		// Fetch tags for this replication group
-		tagsOut, err := svc.ListTagsForResource(ctx, &elasticache.ListTagsForResourceInput{
-			ResourceName: cluster.ARN,
-		})
-		if err != nil {
-			continue // skip clusters we can't tag-inspect
-		}
-		for _, tag := range tagsOut.TagList {
-			if tag.Key != nil && *tag.Key == "env" && tag.Value != nil && strings.Contains(*tag.Value, environment) {
-				// Ensure NodeGroups is non-empty and PrimaryEndpoint is not nil
-				if len(cluster.NodeGroups) == 0 || cluster.NodeGroups[0].PrimaryEndpoint == nil {
-					continue
-				}
-				clusters = append(clusters, redisCluster{
-					Name:     *cluster.ReplicationGroupId,
-					Endpoint: *cluster.NodeGroups[0].PrimaryEndpoint.Address,
-					Port:     int32(*cluster.NodeGroups[0].PrimaryEndpoint.Port),
-				})
-				break // found env tag, no need to check more tags
-			}
-		}
+	cluster := result.ReplicationGroups[0]
+	
+	// Ensure NodeGroups is non-empty and PrimaryEndpoint is not nil
+	if len(cluster.NodeGroups) == 0 {
+		return "", 0, fmt.Errorf("Redis cluster '%s' has no node groups", clusterName)
 	}
 
-	if len(clusters) == 1 {
-		fmt.Printf("🎯 Connecting to Redis cluster: %s\n", clusters[0].Name)
-		return clusters[0].Endpoint, clusters[0].Port, nil
-	} else if len(clusters) > 1 {
-		clusterNames := make([]string, len(clusters))
-		for i, c := range clusters {
-			clusterNames[i] = c.Name
-		}
-		selected, err := prompt.Select("Select Redis cluster", clusterNames)
-		if err != nil {
-			return "", 0, fmt.Errorf("prompt failed %v", err)
-		}
-		for _, c := range clusters {
-			if c.Name == selected {
-				return c.Endpoint, c.Port, nil
-			}
-		}
+	if cluster.NodeGroups[0].PrimaryEndpoint == nil {
+		return "", 0, fmt.Errorf("Redis cluster '%s' does not have a primary endpoint (may not be available)", clusterName)
 	}
 
-	return "", 0, fmt.Errorf("no Redis clusters found for environment %s", environment)
+	fmt.Printf("🎯 Connecting to Redis cluster: %s\n", *cluster.ReplicationGroupId)
+	return *cluster.NodeGroups[0].PrimaryEndpoint.Address, int32(*cluster.NodeGroups[0].PrimaryEndpoint.Port), nil
 }
 
 // Start SSM port forwarding session with keep alive functionality
@@ -665,7 +585,6 @@ func performKeepAlive(localPort string) error {
 	return nil
 }
 
-
 func validatePort(input string) error {
 	inputPort, err := strconv.Atoi(input)
 	if err != nil {
@@ -694,7 +613,7 @@ func isPortInUse(port int) bool {
 }
 
 // offerToSaveProfile prompts the user to save the manual connection configuration as a profile
-func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, environment, serviceType, port, bastionInstanceID string) {
+func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, environment, serviceType, port, bastionInstanceID, rdsInstanceName, redisClusterName string) {
 	fmt.Println() // Add some spacing
 
 	// Ask if they want to save the configuration
@@ -720,14 +639,16 @@ func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfil
 
 	// Create connection profile
 	connectionProfile := config.ConnectionProfile{
-		SSOProfile:       ssoProfile,
-		AccountID:        accountID,
-		RoleName:         roleName,
-		Region:           region,
-		Environment:      environment,
-		ServiceType:      serviceType,
-		Port:             port,
+		SSOProfile:        ssoProfile,
+		AccountID:         accountID,
+		RoleName:          roleName,
+		Region:            region,
+		Environment:       environment,
+		ServiceType:       serviceType,
+		Port:              port,
 		BastionInstanceID: bastionInstanceID,
+		RDSInstanceName:   rdsInstanceName,
+		RedisClusterName:  redisClusterName,
 	}
 
 	// Save the profile

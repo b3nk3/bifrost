@@ -164,14 +164,32 @@ Examples:
 			port = result
 		}
 
-		// Prompt for bastion instance ID if not provided (optional)
+		// Prompt for bastion instance ID if not provided
 		if bastionInstanceID == "" {
-			result, err := prompt.Input("Bastion Instance ID (optional - leave empty for auto-discovery)", nil)
+			result, err := prompt.Input("Bastion Instance ID", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
 			bastionInstanceID = result
+		}
+
+		// Prompt for RDS/Redis resource names based on service type
+		var rdsInstanceName, redisClusterName string
+		if serviceType == "rds" {
+			result, err := prompt.Input("RDS DB Instance Name", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			rdsInstanceName = result
+		} else if serviceType == "redis" {
+			result, err := prompt.Input("Redis Cluster Name (replication group ID)", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			redisClusterName = result
 		}
 
 		// Create connection profile
@@ -184,6 +202,8 @@ Examples:
 			ServiceType:       serviceType,
 			Port:              port,
 			BastionInstanceID: bastionInstanceID,
+			RDSInstanceName:   rdsInstanceName,
+			RedisClusterName:  redisClusterName,
 		}
 
 		// Save the profile (local by default, global if specified)
@@ -241,6 +261,16 @@ var profileListCmd = &cobra.Command{
 			}
 			if profile.Port != "" {
 				fmt.Printf("    Port: %s\n", profile.Port)
+			}
+			if profile.BastionInstanceID != "" {
+				fmt.Printf("    Bastion: %s\n", profile.BastionInstanceID)
+			}
+			// Only show service-specific resource names
+			if profile.ServiceType == "rds" && profile.RDSInstanceName != "" {
+				fmt.Printf("    RDS Instance: %s\n", profile.RDSInstanceName)
+			}
+			if profile.ServiceType == "redis" && profile.RedisClusterName != "" {
+				fmt.Printf("    Redis Cluster: %s\n", profile.RedisClusterName)
 			}
 			fmt.Println()
 		}
