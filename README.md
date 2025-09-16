@@ -1,6 +1,7 @@
-<h1 style="text-align: center;">🌈 Bifrost </h1>
-
+<div align="center">
+<h1>🌈 Bifrost </h1>
 A command-line utility to simplify connecting to AWS RDS/Redis instances through bastion hosts utilising AWS SSM Session Manager.
+</div>
 
 ## Features
 
@@ -44,7 +45,7 @@ bifrost connect
 bifrost connect --profile dev-rds
 
 # Direct connection with flags
-bifrost connect --env dev --service rds --port 3306
+bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0
 
 # With custom keep alive interval
 bifrost connect --profile dev-redis --keep-alive-interval 60s
@@ -56,7 +57,7 @@ bifrost connect --profile dev-rds --keep-alive=false
 ### 3. Manage Profiles
 ```bash
 # Create a connection profile
-bifrost profile create --name staging-db --env stg --service rds
+bifrost profile create --name staging-db --env stg --service rds --bastion-id i-1234567890abcdef0
 
 # List profiles
 bifrost profile list
@@ -71,7 +72,7 @@ bifrost help
 
 **Smart Discovery**: Resources are discovered via AWS tags (`env=<environment>`). Bastion hosts are found by name pattern (`*bastion*`) + environment tag.
 
-**Profile System**: Save connection settings locally (`.bifrost.config.yaml`) or globally (`~/.bifrost/config.yaml`). SSO profiles are always global, connection profiles can be either.
+**Profile System**: Save connection settings locally (`.bifrost.config.yaml`) or globally (`~/.bifrost/config.yaml`). SSO profiles are always global, connection profiles can be either. Profiles can include bastion instance IDs for direct connections.
 ## Updating
 ### Using Homebrew
 

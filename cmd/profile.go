@@ -42,6 +42,7 @@ Examples:
 		environment, _ := cmd.Flags().GetString("env")
 		serviceType, _ := cmd.Flags().GetString("service")
 		port, _ := cmd.Flags().GetString("port")
+		bastionInstanceID, _ := cmd.Flags().GetString("bastion-id")
 		global, _ := cmd.Flags().GetBool("global")
 
 		// Load config to check available SSO profiles
@@ -126,15 +127,84 @@ Examples:
 			serviceType = result
 		}
 
+		// Prompt for account ID if not provided
+		if accountID == "" {
+			result, err := prompt.Input("AWS Account ID", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			accountID = result
+		}
+
+		// Prompt for role name if not provided
+		if roleName == "" {
+			result, err := prompt.Input("AWS Role Name (e.g., PowerUserAccess)", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			roleName = result
+		}
+
+		// Prompt for port if not provided
+		if port == "" {
+			defaultPort := "3306" // MySQL default
+			if serviceType == "redis" {
+				defaultPort = "6379"
+			}
+			result, err := prompt.Input(fmt.Sprintf("Local port (default: %s)", defaultPort), nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			if result == "" {
+				result = defaultPort
+			}
+			port = result
+		}
+
+		// Prompt for bastion instance ID if not provided
+		if bastionInstanceID == "" {
+			result, err := prompt.Input("Bastion Instance ID", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			bastionInstanceID = result
+		}
+
+		// Prompt for RDS/Redis resource names based on service type
+		var rdsInstanceName, redisClusterName string
+		switch serviceType {
+		case "rds":
+			result, err := prompt.Input("RDS DB Instance Name", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			rdsInstanceName = result
+		case "redis":
+			result, err := prompt.Input("Redis Cluster Name (replication group ID)", nil)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			redisClusterName = result
+		}
+
 		// Create connection profile
 		connectionProfile := config.ConnectionProfile{
-			SSOProfile:  ssoProfile,
-			AccountID:   accountID,
-			RoleName:    roleName,
-			Region:      region,
-			Environment: environment,
-			ServiceType: serviceType,
-			Port:        port,
+			SSOProfile:        ssoProfile,
+			AccountID:         accountID,
+			RoleName:          roleName,
+			Region:            region,
+			Environment:       environment,
+			ServiceType:       serviceType,
+			Port:              port,
+			BastionInstanceID: bastionInstanceID,
+			RDSInstanceName:   rdsInstanceName,
+			RedisClusterName:  redisClusterName,
 		}
 
 		// Save the profile (local by default, global if specified)
@@ -192,6 +262,16 @@ var profileListCmd = &cobra.Command{
 			}
 			if profile.Port != "" {
 				fmt.Printf("    Port: %s\n", profile.Port)
+			}
+			if profile.BastionInstanceID != "" {
+				fmt.Printf("    Bastion: %s\n", profile.BastionInstanceID)
+			}
+			// Only show service-specific resource names
+			if profile.ServiceType == "rds" && profile.RDSInstanceName != "" {
+				fmt.Printf("    RDS Instance: %s\n", profile.RDSInstanceName)
+			}
+			if profile.ServiceType == "redis" && profile.RedisClusterName != "" {
+				fmt.Printf("    Redis Cluster: %s\n", profile.RedisClusterName)
 			}
 			fmt.Println()
 		}
@@ -256,7 +336,7 @@ var profileDeleteCmd = &cobra.Command{
 			localViper := viper.New()
 			localViper.SetConfigType("yaml")
 			localViper.SetConfigFile(localConfigFile)
-			
+
 			if err := localViper.ReadInConfig(); err == nil {
 				if err := localViper.Unmarshal(localConfig); err == nil {
 					if _, existsLocally := localConfig.ConnectionProfiles[profileName]; existsLocally {
@@ -279,35 +359,35 @@ var profileDeleteCmd = &cobra.Command{
 			SSOProfiles:        make(map[string]config.SSOProfile),
 			ConnectionProfiles: make(map[string]config.ConnectionProfile),
 		}
-		
+
 		// Load only global config
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Printf("Error getting home directory: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		globalConfigFile := filepath.Join(homeDir, ".bifrost", "config.yaml")
 		globalViper := viper.New()
 		globalViper.SetConfigType("yaml")
 		globalViper.SetConfigFile(globalConfigFile)
-		
+
 		if err := globalViper.ReadInConfig(); err != nil {
 			fmt.Printf("Error reading global config: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		if err := globalViper.Unmarshal(globalConfig); err != nil {
 			fmt.Printf("Error parsing global config: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		// Check if profile exists in global config
 		if _, existsGlobally := globalConfig.ConnectionProfiles[profileName]; !existsGlobally {
 			fmt.Printf("Connection profile '%s' not found in global config\n", profileName)
 			os.Exit(1)
 		}
-		
+
 		// Delete from global config
 		delete(globalConfig.ConnectionProfiles, profileName)
 		if err := cfgManager.Save(globalConfig); err != nil {
@@ -334,6 +414,7 @@ func init() {
 	profileCreateCmd.Flags().StringP("env", "e", "", "Environment (dev, stg, prd)")
 	profileCreateCmd.Flags().StringP("service", "s", "", "Service type (rds, redis)")
 	profileCreateCmd.Flags().StringP("port", "p", "", "Default local port")
+	profileCreateCmd.Flags().String("bastion-id", "", "Bastion instance ID (optional)")
 	profileCreateCmd.Flags().Bool("global", false, "Save to global config instead of local (.bifrost.config.yaml)")
 
 	// Delete command flags

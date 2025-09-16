@@ -69,12 +69,15 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 	}
 
 	fmt.Println("\n🔐 Please complete the AWS SSO login in your browser")
-	fmt.Printf("🔑 Code: %s\n\n", *deviceAuth.UserCode)
+	fmt.Printf("🔑 Code: %s\n", *deviceAuth.UserCode)
+	fmt.Printf("🌐 URL: %s\n", verificationURL)
 
 	// Step 2: Poll for token
 	var token *ssooidc.CreateTokenOutput
-	maxRetries := 30 // Maximum number of retries (5 minutes with default 10-second interval)
+	maxRetries := 300 // Maximum number of retries (5 minutes with 1-second interval from AWS)
 	retryCount := 0
+
+	fmt.Printf("🔄 Polling every %d seconds (timeout after %d attempts)\n\n", deviceAuth.Interval, maxRetries)
 
 	for {
 		// Check for context cancellation
@@ -102,6 +105,9 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 		}
 
 		retryCount++
+		if retryCount%10 == 0 {
+			fmt.Printf("⏳ Still waiting for authentication... (%d/%d attempts)\n", retryCount, maxRetries)
+		}
 	}
 
 	// Cache the new token
