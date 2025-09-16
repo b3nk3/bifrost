@@ -112,14 +112,25 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
 9. **Enhanced Signal Handling**: Graceful shutdown with Ctrl+C, proper cleanup of SSM sessions
 
 ### Resource Discovery Pattern
-All AWS resources (bastion hosts, RDS, Redis) can be discovered using:
-- **Direct specification**: Use specific instance IDs or cluster names in profiles
-- **Direct specification**: Use specific instance IDs or cluster names in profiles
-- **Interactive selection**: Single resource confirmed, multiple resources prompted
-- **Service patterns**:
-  - Bastion: Direct EC2 instance ID specification
-  - RDS: Direct DB instance name specification
-  - Redis: Direct ElastiCache cluster name specification
+AWS resources can be accessed through multiple discovery methods:
+
+#### Interactive Discovery (Default)
+- **Empty Input Triggers Browse Mode**: When users leave resource fields empty, Bifrost shows available options
+- **Smart Filtering**: Only displays usable resources
+  - Bastion: SSM-managed EC2 instances (Online/ConnectionLost status only)
+  - RDS: All available database instances in the region
+  - Redis: All available ElastiCache replication groups in the region
+- **Enhanced Display**: Bastion hosts show as "Name (instance-id)" when Name tag exists
+
+#### Direct Specification
+- **Explicit Resource Names**: Users can directly specify resource names/IDs when known
+- **Profile Storage**: Profiles can store specific resource names for repeated use
+- **Validation**: Input validation prevents empty resource names from causing API issues
+
+#### Service Implementation
+- **Bastion Discovery**: `listSSMManagedInstances()` → SSM DescribeInstanceInformation + EC2 DescribeInstances for Name tags
+- **RDS Discovery**: `listRDSInstances()` → RDS DescribeDBInstances (all instances)
+- **Redis Discovery**: `listRedisClusters()` → ElastiCache DescribeReplicationGroups
 
 ### Keep Alive Architecture
 The keep alive system maintains active SSM tunnels to prevent timeouts:
@@ -170,15 +181,21 @@ type ConnectionProfile struct {
 ./bifrost auth login --profile test-profile
 
 # Test connection profiles (defaults to local storage)
-./bifrost profile create --name test-conn --service rds --bastion-id i-1234567890abcdef0
+./bifrost profile create --name test-conn --service rds
+# Leave resource fields empty to test discovery during connection
 
 # Test enhanced connect with profile selection
 ./bifrost connect
 # Will show: ⚙️ Manual setup, 🔗 test-conn
 
-# Test manual setup with profile saving offer
+# Test manual setup with interactive discovery
 ./bifrost connect
-# Select "⚙️ Manual setup" → configure → offered to save as profile
+# Select "⚙️ Manual setup" → leave resource fields empty → browse available resources
+
+# Test resource discovery for each service type
+# - Leave bastion field empty → shows SSM-managed instances
+# - Leave RDS field empty → shows all RDS instances  
+# - Leave Redis field empty → shows all Redis clusters
 
 # Test keep alive functionality (works with all services)
 ./bifrost connect --profile dev-redis --keep-alive-interval 15s
@@ -216,7 +233,7 @@ connection_profiles:
 - **Cobra**: CLI framework and command routing
 - **Viper**: Configuration management with YAML support
 - **Huh (Charm)**: Interactive prompts and forms
-- **AWS SDK v2**: AWS service integration (SSO, EC2, RDS, ElastiCache)
+- **AWS SDK v2**: AWS service integration (SSO, EC2, RDS, ElastiCache, Systems Manager)
 - **Browser**: Opens SSO authentication URLs
 - **Redis Client (go-redis/redis/v8)**: Redis PING commands for keep alive
 - **MySQL Driver (go-sql-driver/mysql)**: MySQL SELECT 1 queries for RDS keep alive

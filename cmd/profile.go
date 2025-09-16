@@ -156,7 +156,7 @@ Examples:
 
 		// Prompt for bastion instance ID if not provided
 		if bastionInstanceID == "" {
-			result, err := prompt.Input("Bastion Instance ID", nil)
+			result, err := prompt.Input("Bastion Instance ID (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
@@ -168,14 +168,14 @@ Examples:
 		var rdsInstanceName, redisClusterName string
 		switch serviceType {
 		case "rds":
-			result, err := prompt.Input("RDS DB Instance Name", nil)
+			result, err := prompt.Input("RDS DB Instance Name (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
 			rdsInstanceName = result
 		case "redis":
-			result, err := prompt.Input("Redis Cluster Name (replication group ID)", nil)
+			result, err := prompt.Input("Redis Cluster Name (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
