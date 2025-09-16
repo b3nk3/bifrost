@@ -19,6 +19,9 @@ go mod tidy
 
 # Test the application
 go build -v && ./bifrost --help
+
+# Lint the code
+golangci-lint run
 ```
 
 ## Architecture Overview
@@ -73,7 +76,6 @@ type ConnectionProfile struct {
     AccountID         string `yaml:"account_id"`
     RoleName          string `yaml:"role_name"`
     Region            string `yaml:"region"`
-    Environment       string `yaml:"environment"`
     ServiceType       string `yaml:"service"`
     Port              string `yaml:"port"`
     BastionInstanceID string `yaml:"bastion_instance_id"` // Direct bastion instance ID
@@ -104,7 +106,7 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
    - `⚙️ Manual setup` for interactive configuration
 3. **Smart Defaults**: Profile values serve as defaults, prompting only for missing values
 4. **Profile Saving Offer**: After manual setup (before SSM connection), offer to save configuration:
-   - Suggests `{environment}-{service}` naming (e.g., "dev-rds")
+   - Suggests resource name or service type for profile naming
    - Choice between `📁 Local (.bifrost.config.yaml)` or `🌍 Global (~/.bifrost/config.yaml)`
 5. **SSO Authentication**: Auto-detect single SSO profile or prompt for selection
 6. **Resource Discovery**: Tag-based filtering with interactive selection for multiple matches, or direct instance/cluster specification
@@ -113,14 +115,25 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
 9. **Enhanced Signal Handling**: Graceful shutdown with Ctrl+C, proper cleanup of SSM sessions
 
 ### Resource Discovery Pattern
-All AWS resources (bastion hosts, RDS, Redis) can be discovered using:
-- **Tag filtering**: `env=<environment>` tag matching (automatic discovery)
-- **Direct specification**: Use specific instance IDs or cluster names in profiles
-- **Interactive selection**: Single resource confirmed, multiple resources prompted
-- **Service patterns**:
-  - Bastion: EC2 instances with `Name=*bastion*` + `env=<environment>`, or direct instance ID
-  - RDS: DB instances with `env=<environment>` tag, or specific instance name
-  - Redis: ElastiCache clusters with `env=<environment>` tag, or specific cluster name
+AWS resources can be accessed through multiple discovery methods:
+
+#### Interactive Discovery (Default)
+- **Empty Input Triggers Browse Mode**: When users leave resource fields empty, Bifrost shows available options
+- **Smart Filtering**: Only displays usable resources
+  - Bastion: SSM-managed EC2 instances (Online/ConnectionLost status only)
+  - RDS: All available database instances in the region
+  - Redis: All available ElastiCache replication groups in the region
+- **Enhanced Display**: Bastion hosts show as "Name (instance-id)" when Name tag exists
+
+#### Direct Specification
+- **Explicit Resource Names**: Users can directly specify resource names/IDs when known
+- **Profile Storage**: Profiles can store specific resource names for repeated use
+- **Validation**: Input validation prevents empty resource names from causing API issues
+
+#### Service Implementation
+- **Bastion Discovery**: `listSSMManagedInstances()` → SSM DescribeInstanceInformation + EC2 DescribeInstances for Name tags
+- **RDS Discovery**: `listRDSInstances()` → RDS DescribeDBInstances (all instances)
+- **Redis Discovery**: `listRedisClusters()` → ElastiCache DescribeReplicationGroups
 
 ### Keep Alive Architecture
 The keep alive system maintains active SSM tunnels to prevent timeouts:
@@ -171,15 +184,21 @@ type ConnectionProfile struct {
 ./bifrost auth login --profile test-profile
 
 # Test connection profiles (defaults to local storage)
-./bifrost profile create --name test-conn --env dev --service rds --bastion-id i-1234567890abcdef0
+./bifrost profile create --name test-conn --service rds
+# Leave resource fields empty to test discovery during connection
 
 # Test enhanced connect with profile selection
 ./bifrost connect
 # Will show: ⚙️ Manual setup, 🔗 test-conn
 
-# Test manual setup with profile saving offer
+# Test manual setup with interactive discovery
 ./bifrost connect
-# Select "⚙️ Manual setup" → configure → offered to save as profile
+# Select "⚙️ Manual setup" → leave resource fields empty → browse available resources
+
+# Test resource discovery for each service type
+# - Leave bastion field empty → shows SSM-managed instances
+# - Leave RDS field empty → shows all RDS instances  
+# - Leave Redis field empty → shows all Redis clusters
 
 # Test keep alive functionality (works with all services)
 ./bifrost connect --profile dev-redis --keep-alive-interval 15s
@@ -200,17 +219,16 @@ type ConnectionProfile struct {
 ```yaml
 # .bifrost.config.yaml
 connection_profiles:
-  dev-rds:
+  production-database:
     sso_profile: work         # References global SSO profile
     account_id: "123456789"
     role_name: PowerUserAccess
     region: us-west-2
-    environment: dev
     service: rds
     port: "3306"
-    bastion_instance_id: "i-1234567890abcdef0"  # Optional: Direct bastion instance
-    rds_instance_name: "dev-database"           # Optional: Specific RDS instance
-    redis_cluster_name: "dev-cache"             # Optional: Specific Redis cluster
+    bastion_instance_id: "i-1234567890abcdef0"  # Direct bastion instance
+    rds_instance_name: "prod-database-1"        # Specific RDS instance
+    redis_cluster_name: "prod-cache-cluster"    # Specific Redis cluster
 ```
 
 ## Key Dependencies
@@ -218,7 +236,7 @@ connection_profiles:
 - **Cobra**: CLI framework and command routing
 - **Viper**: Configuration management with YAML support
 - **Huh (Charm)**: Interactive prompts and forms
-- **AWS SDK v2**: AWS service integration (SSO, EC2, RDS, ElastiCache)
+- **AWS SDK v2**: AWS service integration (SSO, EC2, RDS, ElastiCache, Systems Manager)
 - **Browser**: Opens SSO authentication URLs
 - **Redis Client (go-redis/redis/v8)**: Redis PING commands for keep alive
 - **MySQL Driver (go-sql-driver/mysql)**: MySQL SELECT 1 queries for RDS keep alive

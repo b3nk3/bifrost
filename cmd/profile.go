@@ -28,7 +28,7 @@ var profileCreateCmd = &cobra.Command{
 Profiles are saved locally (.bifrost.config.yaml) by default, use --global for system-wide profiles.
 
 Examples:
-  bifrost profile create --name dev-rds --sso-profile work --env dev --service rds
+  bifrost profile create --name dev-rds --sso-profile work --service rds
   bifrost profile create --name prod-redis --global --sso-profile work --account-id 123456789 --role-name AdminRole`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfgManager := config.NewManager()
@@ -39,7 +39,6 @@ Examples:
 		accountID, _ := cmd.Flags().GetString("account-id")
 		roleName, _ := cmd.Flags().GetString("role-name")
 		region, _ := cmd.Flags().GetString("region")
-		environment, _ := cmd.Flags().GetString("env")
 		serviceType, _ := cmd.Flags().GetString("service")
 		port, _ := cmd.Flags().GetString("port")
 		bastionInstanceID, _ := cmd.Flags().GetString("bastion-id")
@@ -107,15 +106,6 @@ Examples:
 			region = result
 		}
 
-		// Prompt for environment if not provided
-		if environment == "" {
-			result, err := prompt.Select("Select environment", []string{"dev", "stg", "prd"})
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-				os.Exit(1)
-			}
-			environment = result
-		}
 
 		// Prompt for service type if not provided
 		if serviceType == "" {
@@ -166,7 +156,7 @@ Examples:
 
 		// Prompt for bastion instance ID if not provided
 		if bastionInstanceID == "" {
-			result, err := prompt.Input("Bastion Instance ID", nil)
+			result, err := prompt.Input("Bastion Instance ID (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
@@ -178,14 +168,14 @@ Examples:
 		var rdsInstanceName, redisClusterName string
 		switch serviceType {
 		case "rds":
-			result, err := prompt.Input("RDS DB Instance Name", nil)
+			result, err := prompt.Input("RDS DB Instance Name (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
 			rdsInstanceName = result
 		case "redis":
-			result, err := prompt.Input("Redis Cluster Name (replication group ID)", nil)
+			result, err := prompt.Input("Redis Cluster Name (optional - leave empty to browse during connection)", nil)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
@@ -199,7 +189,6 @@ Examples:
 			AccountID:         accountID,
 			RoleName:          roleName,
 			Region:            region,
-			Environment:       environment,
 			ServiceType:       serviceType,
 			Port:              port,
 			BastionInstanceID: bastionInstanceID,
@@ -251,7 +240,6 @@ var profileListCmd = &cobra.Command{
 		for name, profile := range cfg.ConnectionProfiles {
 			fmt.Printf("  • %s\n", name)
 			fmt.Printf("    SSO Profile: %s\n", profile.SSOProfile)
-			fmt.Printf("    Environment: %s\n", profile.Environment)
 			fmt.Printf("    Service: %s\n", profile.ServiceType)
 			fmt.Printf("    Region: %s\n", profile.Region)
 			if profile.AccountID != "" {
@@ -411,7 +399,6 @@ func init() {
 	profileCreateCmd.Flags().StringP("account-id", "a", "", "AWS account ID")
 	profileCreateCmd.Flags().StringP("role-name", "r", "", "AWS role name")
 	profileCreateCmd.Flags().String("region", "", "AWS region where workloads are deployed")
-	profileCreateCmd.Flags().StringP("env", "e", "", "Environment (dev, stg, prd)")
 	profileCreateCmd.Flags().StringP("service", "s", "", "Service type (rds, redis)")
 	profileCreateCmd.Flags().StringP("port", "p", "", "Default local port")
 	profileCreateCmd.Flags().String("bastion-id", "", "Bastion instance ID (optional)")
