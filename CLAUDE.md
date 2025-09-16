@@ -73,7 +73,6 @@ type ConnectionProfile struct {
     AccountID         string `yaml:"account_id"`
     RoleName          string `yaml:"role_name"`
     Region            string `yaml:"region"`
-    Environment       string `yaml:"environment"`
     ServiceType       string `yaml:"service"`
     Port              string `yaml:"port"`
     BastionInstanceID string `yaml:"bastion_instance_id"` // Direct bastion instance ID
@@ -104,7 +103,7 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
    - `⚙️ Manual setup` for interactive configuration
 3. **Smart Defaults**: Profile values serve as defaults, prompting only for missing values
 4. **Profile Saving Offer**: After manual setup (before SSM connection), offer to save configuration:
-   - Suggests `{environment}-{service}` naming (e.g., "dev-rds")
+   - Suggests resource name or service type for profile naming
    - Choice between `📁 Local (.bifrost.config.yaml)` or `🌍 Global (~/.bifrost/config.yaml)`
 5. **SSO Authentication**: Auto-detect single SSO profile or prompt for selection
 6. **Resource Discovery**: Tag-based filtering with interactive selection for multiple matches, or direct instance/cluster specification
@@ -114,13 +113,13 @@ The connect command (`cmd/connect.go`) implements a sophisticated user experienc
 
 ### Resource Discovery Pattern
 All AWS resources (bastion hosts, RDS, Redis) can be discovered using:
-- **Tag filtering**: `env=<environment>` tag matching (automatic discovery)
+- **Direct specification**: Use specific instance IDs or cluster names in profiles
 - **Direct specification**: Use specific instance IDs or cluster names in profiles
 - **Interactive selection**: Single resource confirmed, multiple resources prompted
 - **Service patterns**:
-  - Bastion: EC2 instances with `Name=*bastion*` + `env=<environment>`, or direct instance ID
-  - RDS: DB instances with `env=<environment>` tag, or specific instance name
-  - Redis: ElastiCache clusters with `env=<environment>` tag, or specific cluster name
+  - Bastion: Direct EC2 instance ID specification
+  - RDS: Direct DB instance name specification
+  - Redis: Direct ElastiCache cluster name specification
 
 ### Keep Alive Architecture
 The keep alive system maintains active SSM tunnels to prevent timeouts:
@@ -171,7 +170,7 @@ type ConnectionProfile struct {
 ./bifrost auth login --profile test-profile
 
 # Test connection profiles (defaults to local storage)
-./bifrost profile create --name test-conn --env dev --service rds --bastion-id i-1234567890abcdef0
+./bifrost profile create --name test-conn --service rds --bastion-id i-1234567890abcdef0
 
 # Test enhanced connect with profile selection
 ./bifrost connect
@@ -200,17 +199,16 @@ type ConnectionProfile struct {
 ```yaml
 # .bifrost.config.yaml
 connection_profiles:
-  dev-rds:
+  production-database:
     sso_profile: work         # References global SSO profile
     account_id: "123456789"
     role_name: PowerUserAccess
     region: us-west-2
-    environment: dev
     service: rds
     port: "3306"
-    bastion_instance_id: "i-1234567890abcdef0"  # Optional: Direct bastion instance
-    rds_instance_name: "dev-database"           # Optional: Specific RDS instance
-    redis_cluster_name: "dev-cache"             # Optional: Specific Redis cluster
+    bastion_instance_id: "i-1234567890abcdef0"  # Direct bastion instance
+    rds_instance_name: "prod-database-1"        # Specific RDS instance
+    redis_cluster_name: "prod-cache-cluster"    # Specific Redis cluster
 ```
 
 ## Key Dependencies

@@ -5,7 +5,7 @@ A command-line utility to simplify connecting to AWS RDS/Redis instances through
 
 ## Features
 
-- **Smart Connection Management**: Automatic discovery of RDS/Redis instances and bastion hosts via tags
+- **Direct Resource Access**: Connect to specific RDS/Redis instances and bastion hosts by name/ID
 - **SSO Integration**: Seamless AWS SSO authentication with token caching
 - **Connection Profiles**: Save and reuse connection configurations (local or global)
 - **Keep Alive**: Maintains stable connections with periodic health checks (like TablePlus)
@@ -45,7 +45,7 @@ bifrost connect
 bifrost connect --profile dev-rds
 
 # Direct connection with flags
-bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0
+bifrost connect --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0
 
 # With custom keep alive interval
 bifrost connect --profile dev-redis --keep-alive-interval 60s
@@ -57,7 +57,7 @@ bifrost connect --profile dev-rds --keep-alive=false
 ### 3. Manage Profiles
 ```bash
 # Create a connection profile
-bifrost profile create --name staging-db --env stg --service rds --bastion-id i-1234567890abcdef0
+bifrost profile create --name staging-db --service rds --bastion-id i-1234567890abcdef0
 
 # List profiles
 bifrost profile list
@@ -70,7 +70,7 @@ bifrost help
 
 **Keep Alive**: Bifrost automatically sends lightweight health checks to your database connections (Redis `PING`, RDS `SELECT 1`) every 30 seconds by default. This prevents timeout disconnections, similar to how TablePlus maintains stable connections.
 
-**Smart Discovery**: Resources are discovered via AWS tags (`env=<environment>`). Bastion hosts are found by name pattern (`*bastion*`) + environment tag.
+**Direct Resource Specification**: Resources are specified by exact names or IDs. Profiles store specific bastion instance IDs, RDS instance names, and Redis cluster names.
 
 **Profile System**: Save connection settings locally (`.bifrost.config.yaml`) or globally (`~/.bifrost/config.yaml`). SSO profiles are always global, connection profiles can be either. Profiles can include bastion instance IDs for direct connections.
 ## Updating
@@ -91,7 +91,7 @@ To update bifrost to the latest version:
 
 ## Upcoming features
 
-- [ ] Customizable tag filtering?
+- [ ] Optional tag-based resource discovery
 - [ ] Multiple simultaneous connections
 - [ ] Terminal UI (TUI) interface
 

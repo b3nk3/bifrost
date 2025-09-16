@@ -32,7 +32,7 @@ var connectCmd = &cobra.Command{
 	Long: `Initiate a connection to an AWS RDS/Redis instance through a bastion host with AWS SSM Session Manager.
 	
 For example:
-bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0`,
+bifrost connect --service rds --port 3306 --bastion-instance-id i-1234567890abcdef0`,
 	Run: func(cmd *cobra.Command, args []string) {
 		prompt := ui.NewPrompt()
 		cfgManager := config.NewManager()
@@ -42,7 +42,6 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 		accountIdFlag, _ := cmd.Flags().GetString("account-id")
 		roleNameFlag, _ := cmd.Flags().GetString("role-name")
 		regionFlag, _ := cmd.Flags().GetString("region")
-		environmentFlag, _ := cmd.Flags().GetString("env")
 		serviceTypeFlag, _ := cmd.Flags().GetString("service")
 		portFlag, _ := cmd.Flags().GetString("port")
 		bastionInstanceIDFlag, _ := cmd.Flags().GetString("bastion-instance-id")
@@ -109,9 +108,6 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 			}
 			if regionFlag == "" && selectedProfile.Region != "" {
 				regionFlag = selectedProfile.Region
-			}
-			if environmentFlag == "" && selectedProfile.Environment != "" {
-				environmentFlag = selectedProfile.Environment
 			}
 			if serviceTypeFlag == "" && selectedProfile.ServiceType != "" {
 				serviceTypeFlag = selectedProfile.ServiceType
@@ -180,20 +176,7 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 			os.Exit(1)
 		}
 
-		// 0. Check for environment and service type arguments
-
-		if environmentFlag == "" {
-			result, err := prompt.Select("Select environment", []string{"dev", "stg", "prd"})
-			if err != nil {
-				fmt.Printf("Prompt failed %v\n", err)
-				return
-			}
-			environmentFlag = result
-		} else if environmentFlag != "dev" && environmentFlag != "stg" && environmentFlag != "prd" {
-			fmt.Println("Invalid environment. Please choose either 'dev', 'stg', or 'prd'.")
-			return
-		}
-		fmt.Printf("🌍 Environment: %s\n", environmentFlag)
+		// Check service type
 
 		if serviceTypeFlag == "" {
 			result, err := prompt.Select("Select service type", []string{"rds", "redis"})
@@ -279,7 +262,7 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 			} else {
 				rdsName = dbName
 			}
-			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, environmentFlag, serviceTypeFlag, portFlag, bastionInstanceIDFlag, rdsName, redisName)
+			offerToSaveProfile(cfgManager, prompt, ssoProfileFlag, accountIdFlag, roleNameFlag, regionFlag, serviceTypeFlag, portFlag, bastionInstanceIDFlag, rdsName, redisName)
 		}
 
 		fmt.Printf("🔌 Forwarding `%s` to 127.0.0.1:%s (use this as host in your app or client)\n", serviceTypeFlag, portFlag)
@@ -289,7 +272,7 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 		if keepAliveFlag {
 			fmt.Printf("💓 Keep alive enabled (interval: %v)\n", keepAliveInterval)
 		}
-		err = startSSMPortForwardingWithKeepAlive(awsCfg, bastionInstanceIDFlag, endpoint, port, portFlag, regionFlag, serviceTypeFlag, keepAliveFlag, keepAliveInterval)
+		err = startSSMPortForwardingWithKeepAlive(awsCfg, bastionInstanceIDFlag, endpoint, port, portFlag, regionFlag, keepAliveFlag, keepAliveInterval)
 		if err != nil {
 			fmt.Printf("Error starting SSM session: %v\n", err)
 			os.Exit(1)
@@ -301,7 +284,6 @@ bifrost connect --env dev --service rds --port 3306 --bastion-instance-id i-1234
 func init() {
 	rootCmd.AddCommand(connectCmd)
 
-	connectCmd.Flags().StringP("env", "e", "", "AWS environment")
 	connectCmd.Flags().StringP("service", "s", "", "Service type (rds or redis)")
 	connectCmd.Flags().StringP("port", "p", "", "Local port to use for forwarding")
 	connectCmd.Flags().StringP("account-id", "a", "", "AWS account ID")
@@ -444,7 +426,7 @@ func getRedisEndpoint(cfg aws.Config, clusterName string) (string, int32, error)
 }
 
 // Start SSM port forwarding session with keep alive functionality
-func startSSMPortForwardingWithKeepAlive(cfg aws.Config, instanceID, endpoint string, port int32, localPort string, workloadRegion string, serviceType string, keepAlive bool, keepAliveInterval time.Duration) error {
+func startSSMPortForwardingWithKeepAlive(cfg aws.Config, instanceID, endpoint string, port int32, localPort string, workloadRegion string, keepAlive bool, keepAliveInterval time.Duration) error {
 	// Construct the SSM command
 	ssmArgs := []string{
 		"ssm", "start-session",
@@ -520,7 +502,7 @@ func startSSMPortForwardingWithKeepAlive(cfg aws.Config, instanceID, endpoint st
 func startKeepAliveWhenReady(ctx context.Context, localPort string, interval time.Duration) {
 	// Poll until the SSM tunnel is ready (check every 500ms for up to 30 seconds)
 	maxAttempts := 60 // 30 seconds with 500ms intervals
-	for i := 0; i < maxAttempts; i++ {
+	for range maxAttempts {
 		select {
 		case <-ctx.Done():
 			return
@@ -606,7 +588,7 @@ func isPortInUse(port int) bool {
 }
 
 // offerToSaveProfile prompts the user to save the manual connection configuration as a profile
-func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, environment, serviceType, port, bastionInstanceID, rdsInstanceName, redisClusterName string) {
+func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfile, accountID, roleName, region, serviceType, port, bastionInstanceID, rdsInstanceName, redisClusterName string) {
 	fmt.Println() // Add some spacing
 
 	// Ask if they want to save the configuration
@@ -616,7 +598,12 @@ func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfil
 	}
 
 	// Prompt for profile name
-	defaultName := fmt.Sprintf("%s-%s", environment, serviceType)
+	defaultName := serviceType
+	if rdsInstanceName != "" {
+		defaultName = rdsInstanceName
+	} else if redisClusterName != "" {
+		defaultName = redisClusterName
+	}
 	profileName, err := prompt.Input("Profile name", nil, defaultName)
 	if err != nil {
 		fmt.Printf("Error getting profile name: %v\n", err)
@@ -636,7 +623,6 @@ func offerToSaveProfile(cfgManager *config.Manager, prompt *ui.Prompt, ssoProfil
 		AccountID:         accountID,
 		RoleName:          roleName,
 		Region:            region,
-		Environment:       environment,
 		ServiceType:       serviceType,
 		Port:              port,
 		BastionInstanceID: bastionInstanceID,

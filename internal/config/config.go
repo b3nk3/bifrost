@@ -20,7 +20,6 @@ type ConnectionProfile struct {
 	AccountID        string `yaml:"account_id,omitempty" mapstructure:"account_id"`
 	RoleName         string `yaml:"role_name,omitempty" mapstructure:"role_name"`
 	Region           string `yaml:"region,omitempty" mapstructure:"region"`
-	Environment      string `yaml:"environment,omitempty" mapstructure:"environment"`
 	ServiceType      string `yaml:"service,omitempty" mapstructure:"service"`
 	Port             string `yaml:"port,omitempty" mapstructure:"port"`
 	BastionInstanceID string `yaml:"bastion_instance_id,omitempty" mapstructure:"bastion_instance_id"`
