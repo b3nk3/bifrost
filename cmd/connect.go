@@ -593,7 +593,7 @@ func listRedisClusters(cfg aws.Config) ([]string, error) {
 // Get the Redis cluster endpoint by replication group name
 func getRedisEndpoint(cfg aws.Config, clusterName string) (string, int32, error) {
 	if clusterName == "" {
-		return "", 0, fmt.Errorf("Redis cluster name cannot be empty")
+		return "", 0, fmt.Errorf("redis cluster name cannot be empty")
 	}
 	svc := elasticache.NewFromConfig(cfg)
 

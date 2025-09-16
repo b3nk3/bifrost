@@ -19,6 +19,9 @@ go mod tidy
 
 # Test the application
 go build -v && ./bifrost --help
+
+# Lint the code
+golangci-lint run
 ```
 
 ## Architecture Overview
