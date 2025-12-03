@@ -22,6 +22,19 @@ Then install Bifrost:
 ```bash
 brew install LottieHQ/tap/bifrost
 ```
+This checks if LottieHQ/tap is already tapped. If not, it automatically runs:
+```
+brew tap LottieHQ/tap
+```
+
+This clones the repository from `https://github.com/LottieHQ/homebrew-tap` to:
+```
+$(brew --repository)/Library/Taps/LottieHQ/homebrew-tap/
+```
+NOTE: git clone will use https by default. If you use ssh keys you can run 
+```
+brew tap LottieHQ/tap git@github.com:LottieHQ/homebrew-tap.git
+```
 
 ## Quick Start
 
