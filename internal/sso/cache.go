@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,11 +28,10 @@ type ClientRegistrationCache struct {
 	ReceivedAt   time.Time `json:"receivedAt"`
 }
 
-// normalizeStartURL removes a trailing "#" or "/" from startURL to normalize AWS SSO start URLs.
+// normalizeStartURL removes trailing "#" and "/" characters from startURL to normalize AWS SSO start URLs.
+// Handles edge cases like "/#", "/#/", etc.
 func normalizeStartURL(startURL string) string {
-	startURL = strings.TrimSuffix(startURL, "#")
-	startURL = strings.TrimSuffix(startURL, "/")
-	return startURL
+	return strings.TrimRight(startURL, "#/")
 }
 
 // getTokenCachePath returns the filesystem path for the SSO token cache file corresponding to startURL.
@@ -75,7 +75,9 @@ func LoadTokenCache(startURL string) (*TokenCache, error) {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var token TokenCache
-		if err := json.Unmarshal(data, &token); err == nil {
+		if err := json.Unmarshal(data, &token); err != nil {
+			log.Printf("⚠️ Warning: Failed to parse token cache %s (possible corruption): %v", path, err)
+		} else {
 			return &token, nil
 		}
 	}

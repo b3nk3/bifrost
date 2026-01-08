@@ -64,8 +64,8 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 		if err != nil {
 			return nil, fmt.Errorf("RegisterClient: %w", err)
 		}
-		clientId = *register.ClientId
-		clientSecret = *register.ClientSecret
+		clientId = aws.ToString(register.ClientId)
+		clientSecret = aws.ToString(register.ClientSecret)
 
 		// Cache the client registration using AWS-provided expiration
 		expiresAt := time.Unix(register.ClientSecretExpiresAt, 0)
