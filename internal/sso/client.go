@@ -41,20 +41,42 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 		}, nil
 	}
 
-	// Step 1: Begin device authorization
+	// Step 1: Get or register client
 	ssoOidc := ssooidc.NewFromConfig(aws.Config{Region: c.region})
 
-	register, err := ssoOidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
-		ClientName: aws.String("bifrost"),
-		ClientType: aws.String("public"),
-	})
+	var clientId, clientSecret string
+
+	// Try to load cached client registration
+	cachedReg, err := LoadClientRegistration(c.region)
 	if err != nil {
-		return nil, fmt.Errorf("RegisterClient: %w", err)
+		log.Printf("⚠️ Warning: Failed to load cached client registration: %v", err)
+	}
+
+	if cachedReg != nil && time.Now().Before(cachedReg.ExpiresAt) {
+		clientId = cachedReg.ClientId
+		clientSecret = cachedReg.ClientSecret
+	} else {
+		// Register new client
+		register, err := ssoOidc.RegisterClient(ctx, &ssooidc.RegisterClientInput{
+			ClientName: aws.String("bifrost"),
+			ClientType: aws.String("public"),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("RegisterClient: %w", err)
+		}
+		clientId = *register.ClientId
+		clientSecret = *register.ClientSecret
+
+		// Cache the client registration using AWS-provided expiration
+		expiresAt := time.Unix(register.ClientSecretExpiresAt, 0)
+		if err := SaveClientRegistration(c.region, clientId, clientSecret, expiresAt); err != nil {
+			log.Printf("⚠️ Warning: Failed to cache client registration: %v", err)
+		}
 	}
 
 	deviceAuth, err := ssoOidc.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
-		ClientId:     register.ClientId,
-		ClientSecret: register.ClientSecret,
+		ClientId:     aws.String(clientId),
+		ClientSecret: aws.String(clientSecret),
 		StartUrl:     aws.String(c.startURL),
 	})
 	if err != nil {
@@ -95,8 +117,8 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 
 		time.Sleep(time.Duration(deviceAuth.Interval) * time.Second)
 		token, err = ssoOidc.CreateToken(ctx, &ssooidc.CreateTokenInput{
-			ClientId:     register.ClientId,
-			ClientSecret: register.ClientSecret,
+			ClientId:     aws.String(clientId),
+			ClientSecret: aws.String(clientSecret),
 			DeviceCode:   deviceAuth.DeviceCode,
 			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 		})
@@ -110,16 +132,8 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 		}
 	}
 
-	// Cache the new token
-	cacheToken := &TokenCache{
-		AccessToken:  *token.AccessToken,
-		ExpiresAt:    time.Now().Add(8 * time.Hour), // SSO tokens typically expire in 8 hours
-		ClientId:     *register.ClientId,
-		ClientSecret: *register.ClientSecret,
-		StartUrl:     c.startURL,
-		Region:       c.region,
-	}
-	if err := SaveTokenCache(cacheToken); err != nil {
+	// Cache the new token in botocore-compatible format
+	if err := SaveTokenCache(*token.AccessToken, c.startURL, c.region, time.Now().Add(8*time.Hour)); err != nil {
 		log.Printf("⚠️ Warning: Failed to cache token: %v", err)
 	}
 
