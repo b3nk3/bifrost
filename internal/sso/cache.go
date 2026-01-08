@@ -161,11 +161,17 @@ func ClearTokenCache() error {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
-			cachePath := filepath.Join(cacheDir, entry.Name())
-			if err := os.Remove(cachePath); err != nil {
-				return err
-			}
+		// Skip directories and non-JSON files
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		// Preserve client registration files (valid for 90 days)
+		if strings.HasPrefix(entry.Name(), "botocore-client-id-") {
+			continue
+		}
+		cachePath := filepath.Join(cacheDir, entry.Name())
+		if err := os.Remove(cachePath); err != nil {
+			return err
 		}
 	}
 

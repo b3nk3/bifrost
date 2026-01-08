@@ -133,7 +133,9 @@ func (c *Client) Authenticate(ctx context.Context) (*ssooidc.CreateTokenOutput, 
 	}
 
 	// Cache the new token in botocore-compatible format
-	if err := SaveTokenCache(*token.AccessToken, c.startURL, c.region, time.Now().Add(8*time.Hour)); err != nil {
+	// Use ExpiresIn from AWS response (seconds until expiration)
+	expiresAt := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	if err := SaveTokenCache(*token.AccessToken, c.startURL, c.region, expiresAt); err != nil {
 		log.Printf("⚠️ Warning: Failed to cache token: %v", err)
 	}
 
