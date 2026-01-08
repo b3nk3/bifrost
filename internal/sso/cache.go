@@ -201,7 +201,10 @@ func ClearTokenCache() error {
 	return nil
 }
 
-// user home directory cannot be determined or the cache directory cannot be created.
+// getClientRegistrationCachePath returns the filesystem path for the botocore-style
+// client registration cache file for the given region. It ensures the ~/.aws/sso/cache
+// directory exists. An error is returned if the user home directory cannot be determined
+// or the cache directory cannot be created.
 func getClientRegistrationCachePath(region string) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
