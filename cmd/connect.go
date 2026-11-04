@@ -600,25 +600,21 @@ func waitForTunnelReady(ctx context.Context, localPort string, errChan <-chan er
 	return false, nil
 }
 
-const legacySuperuserGroup = "infra-aws-database-admins"
-
 var superuserGroups = map[string]string{
 	"904233092296": "infra-aws-database-admins-stg",
 	"733573666215": "infra-aws-database-admins-prd",
 }
 
 func superuserWarning(accountID string) string {
-	consequence := "If you are not a member, a token will still be generated but the su- database " +
-		"user won't exist and authentication will fail."
 	group, ok := superuserGroups[accountID]
 	if !ok {
-		return fmt.Sprintf("⚠️  Superuser requires the %s Google group. %s\n\n"+
-			"https://groups.google.com/a/lottie.org/g/%s/members", legacySuperuserGroup, consequence, legacySuperuserGroup)
+		return "⚠️  No su- database users are provisioned on this account, only on kubernetes_non_prod " +
+			"and kubernetes_prod. A token will still be generated but authentication will fail."
 	}
 	return fmt.Sprintf("⚠️  Superuser on this account requires the %s Google group "+
-		"(Ravenna request \"Database superuser access\"). Until the old route is retired, "+
-		"the %s group also works. %s\n\n"+
-		"https://groups.google.com/a/lottie.org/g/%s/members", group, legacySuperuserGroup, consequence, group)
+		"(Ravenna request \"Database superuser access\"). If you are not a member, a token will "+
+		"still be generated but the su- database user won't exist and authentication will fail.\n\n"+
+		"https://groups.google.com/a/lottie.org/g/%s/members", group, group)
 }
 
 // promptForAuthMethod asks the user to pick IAM / IAM Admin / Password.

@@ -44,7 +44,7 @@ Bifrost will:
 Databases tagged with `bifrost:iam-auth` offer three auth methods:
 
 - **IAM** — connects as your SSO identity (e.g. `dan.williams@lottie.org`)
-- **IAM Admin** — connects as superuser (e.g. `su-dan.williams@lottie.org`). Requires membership of `infra-aws-database-admins-stg` (kubernetes_non_prod) or `infra-aws-database-admins-prd` (kubernetes_prod), granted for 1 hour by the Ravenna "Database superuser access" request. Until the old route is retired, `infra-aws-database-admins` also works, and it is the requirement on any other account. Bifrost prints this requirement and generates the token without asking for confirmation.
+- **IAM Admin** — connects as superuser (e.g. `su-dan.williams@lottie.org`). Requires membership of `infra-aws-database-admins-stg` (kubernetes_non_prod) or `infra-aws-database-admins-prd` (kubernetes_prod), granted for 1 hour by the Ravenna "Database superuser access" request. No other account has `su-` users. Bifrost prints this requirement, or a not-provisioned warning on other accounts, and generates the token without asking for confirmation.
 - **Password** — manual password entry
 
 ### Other Options

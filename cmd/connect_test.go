@@ -27,7 +27,6 @@ func TestSuperuserWarning(t *testing.T) {
 	}{
 		{"904233092296", "infra-aws-database-admins-stg"},
 		{"733573666215", "infra-aws-database-admins-prd"},
-		{"111111111111", "infra-aws-database-admins"},
 	}
 	for _, c := range cases {
 		got := superuserWarning(c.accountID)
@@ -38,10 +37,10 @@ func TestSuperuserWarning(t *testing.T) {
 			t.Errorf("superuserWarning(%q) = %q, want the %s members link", c.accountID, got, c.group)
 		}
 	}
-	if got := superuserWarning("733573666215"); !strings.Contains(got, "infra-aws-database-admins group also works") {
-		t.Errorf("superuserWarning(prd) = %q, want the old group mentioned", got)
+	if got := superuserWarning("733573666215"); strings.Contains(got, "also works") {
+		t.Errorf("superuserWarning(prd) = %q, want no mention of the old group", got)
 	}
-	if got := superuserWarning("111111111111"); strings.Contains(got, "also works") {
-		t.Errorf("superuserWarning(other) = %q, want no mention of a second group", got)
+	if got := superuserWarning("111111111111"); !strings.Contains(got, "No su- database users are provisioned") || strings.Contains(got, "groups.google.com") {
+		t.Errorf("superuserWarning(other) = %q, want the not-provisioned warning and no group link", got)
 	}
 }
